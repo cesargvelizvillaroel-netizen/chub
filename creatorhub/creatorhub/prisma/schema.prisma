@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Platform {
+  YOUTUBE
+  TIKTOK
+  INSTAGRAM
+}
+
+enum TargetStatus {
+  PENDING
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELED
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  videos       Video[]
+  accounts     SocialAccount[]
+  posts        Post[]
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename    String
+  storageKey  String
+  thumbKey    String?
+  mimeType    String
+  size        Int
+  durationSec Float    @default(0)
+  createdAt   DateTime @default(now())
+  posts       Post[]
+
+  @@index([userId, createdAt])
+}
+
+model SocialAccount {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform        Platform
+  externalId      String
+  displayName     String
+  accessTokenEnc  String
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, platform])
+}
+
+// Un "envío" de un video a una o varias plataformas.
+model Post {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId   String?
+  video     Video?       @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  videoName String
+  createdAt DateTime     @default(now())
+  targets   PostTarget[]
+}
+
+// Una publicación concreta en una plataforma. Es la unidad que procesa el worker.
+model PostTarget {
+  id            String       @id @default(cuid())
+  postId        String
+  post          Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform      Platform
+  title         String
+  description   String       @default("")
+  hashtags      String[]
+  settings      Json         @default("{}")
+  status        TargetStatus
+  scheduledAt   DateTime?
+  nextAttemptAt DateTime
+  publishedAt   DateTime?
+  externalId    String?
+  externalUrl   String?
+  note          String?
+  errorMessage  String?
+  attempts      Int          @default(0)
+  lockedAt      DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([postId])
+}
